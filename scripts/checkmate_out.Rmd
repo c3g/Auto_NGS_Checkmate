@@ -1,0 +1,508 @@
+---
+title: "NGSCheckMate Report"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    code_folding: hide
+    df_print: paged
+params:
+  full_table: "/Users/spety/Documents/"
+  prefix: "prefix"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message=FALSE,warning=FALSE,results="asis",echo=FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(data.table)
+library(RColorBrewer)
+library(DT)
+library(ggplot2)
+library(knitr)
+library(stringr)
+library(Hmisc)
+library(kableExtra)
+library(gtools) ## permutations
+library(tableHTML)
+```
+
+
+```{r params}
+
+#params
+#input directory
+#ind regex
+#sample regex
+#out
+#prefix
+
+#params <- list()
+#params$full_table <- "."
+ind_regex <- "MoHQ-[A-Za-z]+-[0-9]+-[0-9]+"
+sample_regexes <- c("DN","DT","RT")
+file="ncm_test_dir"
+cor_thres <- "0.5"
+out <- "."
+prefix <- "test"
+new_samples <- "new"
+```
+
+
+```{r parsing,results='hide'}
+##do all parsing here:
+#genetic match, sample match case match, sample types  
+
+### add directory here
+data2 <- readRDS(file.path(out,"Correlation_dt.rds"))
+
+
+
+
+
+
+data2[, `:=`(ind1 = str_extract(Sample1, ind_regex),
+             ind2 = str_extract(Sample2, ind_regex))]
+
+data2[, `:=`(genetic_match = Correlation > cor_thres,
+             individual_match = ind1 == ind2)]
+
+data2[, final_match := fifelse(genetic_match & individual_match, "Expected match",
+                               fifelse(!genetic_match & !individual_match, "Expected unmatch",
+                                       fifelse(genetic_match & !individual_match, "Unexpected match",
+                                               "Unexpected unmatch")))]
+
+sample_type_pairs <- permutations(length(sample_regexes),2,sample_regexes,repeats.allowed = T)
+sample_type_pairs_df <- data.frame(sample_type_pairs)
+pairs <- vector(mode="character",length=nrow(sample_type_pairs))
+
+for (i in 1:nrow(sample_type_pairs_df)) {
+  
+     if(pairs[i]=="") {
+       X1=sample_type_pairs_df[i,"X1"]
+       X2=sample_type_pairs_df[i,"X2"]
+       pairs[i]<-paste(X1,X2,sep="vs")
+       idx <- which(sample_type_pairs_df$X1==X2 & sample_type_pairs_df$X2==X1)
+       pairs[idx] <- paste(X1,X2,sep="vs")
+
+     }  
+}
+
+sample_type_pairs_df$pair_type <- pairs
+sample_type_pairs_df$string <- paste(sample_type_pairs_df$X1,sample_type_pairs_df$X2,sep="vs")
+replace_strings <- filter(sample_type_pairs_df,pair_type!=string)
+sample_regexes_collapsed <- paste(sample_regexes,collapse = "|")
+
+
+
+
+data2[, pair_type := paste0(str_extract(Sample1, sample_regexes_collapsed), "vs", str_extract(Sample2, sample_regexes_collapsed))]
+pair_type <- vector(mode="character",length = nrow(data2))
+for (i in 1:nrow(replace_strings)) {
+  print(i)
+ pair_type_tmp <- str_replace(data2$pair_type,replace_strings[i,"string"],replace_strings[i,"pair_type"])
+ data2$pair_type <- pair_type_tmp
+}
+
+
+
+
+match_summary <- data2[, .N, by = final_match]
+match_summary <- as.data.frame(match_summary)
+match_summary <- filter(match_summary,final_match!="Expected unmatch")
+```
+```{r get number of mismatches}
+n_mismatch <- filter(match_summary,str_detect(final_match,"Unexpected")) %>%
+  pull(N) %>% sum()
+```
+
+
+
+```{r count complete cases}
+
+
+all_samples <- c(data2$Sample1,data2$Sample1) %>% unique()
+all_ind <- str_extract(all_samples,ind_regex) %>% unique()
+
+
+## 
+is.complete <- function(vector_ind,all_samples){
+ 
+  ifelse(all(map_lgl(sample_regexes,function(r) {!is_empty(grep(r,all_samples[grep(vector_ind,all_samples)]))})),TRUE,FALSE)
+  
+}
+
+n_complete <- sum(sapply(all_ind,is.complete,all_samples=all_samples,USE.NAMES = FALSE))
+```
+  
+  
+# **Summary**
+```{r input summary}
+n_sample_types <- map_int(sample_regexes,function(x) {
+  n <- sum(grepl(x,all_samples))
+  
+})
+
+n_sample_types_df <- data.frame(n=n_sample_types,row.names = sample_regexes)
+colnames(n_sample_types_df)[1] <- "n"
+
+df1 <- data.frame(n=c(length(all_samples),
+                      n_complete),
+                  row.names = c("Samples","Complete Cases  "))
+
+df1 <- rbind(df1,n_sample_types_df)
+df2 <- data.frame(n=n_mismatch,row.names="Mismatches")
+summary_input_df <- rbind(df1,df2)
+
+tableHTML(summary_input_df,headers="",border = 0,widths = c('200','60')) 
+```
+
+# **Correlation distribution**
+
+```{r correlation distribution}
+
+data2 %>% filter(Correlation > 0.5) %>%
+ggplot(aes(x=Correlation,fill=pair_type)) +
+  geom_histogram()+
+  labs(title="Correlation histogram",x="Correlation values",y="Count")+
+  theme(panel.background = element_blank(),
+        panel.grid = element_line("lightgrey"),
+        legend.position = "none")+
+  facet_wrap(~pair_type,scales = "free")
+
+#data <- data %>% select(V1,V2,V3,V4) %>% `colnames<-`(c("Sample1","State", "Sample2", "Correlation"))
+```
+  
+# **Concordance tables** 
+## **New suspicious results**  
+ 
+
+```{r extract new suspicious results}
+data_print <- data2[final_match %in% c("Unexpected match", "Unexpected unmatch"),
+                    .(Sample1, Sample2, Correlation, State = final_match,Run1,Run2)]
+
+new <- read.csv(new,header=F)
+new_samples <- new$sample_name
+
+data_print <- data_print[Sample1 %in% new_samples | Sample2 %in% new_samples]
+
+
+if(nrow(data_print)==0){
+  cat("**No new suspicious results !**  \n",sep="")
+} else {
+  datatable(data_print,
+            class = c("display","nowrap"),
+            rownames = F,
+            filter = list(position = 'top', clear = FALSE),
+            extensions='Buttons',
+            options=list(columnDefs= list(list(targets=c(4,5),searchable=F),
+                                          list(targets=c(4,5,3),width='10%')),
+                         dom='Bfrtip',
+                         #autoWidth = TRUE,
+                         buttons=list(list(extend='collection',
+                                      buttons=c('csv', 'excel', 'pdf'),
+                                      text='Download')))) %>% 
+    formatStyle('State',
+                  target = 'row',
+                  backgroundColor = styleEqual(c("Expected match","Expected unmatch","Unexpected unmatch","Unexpected match"),
+                                               c('#bee0bc',"#ADD0FF","#FBC87E","#F3A4A3")))
+}
+```
+
+**All suspicious results**  
+```{r extract all suspicious results}
+data_print <- data2[final_match %in% c("Unexpected match", "Unexpected unmatch"),
+                    .(Sample1, Sample2, Correlation, State = final_match,Run1,Run2)]
+
+new <- read.csv(new,header=F)
+new_samples <- new$sample_name
+
+data_print <- data_print[Sample1 %in% new_samples | Sample2 %in% new_samples]
+
+
+if(nrow(data_print)==0){
+  cat("**No suspicious results !**  \n",sep="")
+} else {
+  datatable(data_print,
+            class = c("display","nowrap"),
+            rownames = F,
+            filter = list(position = 'top', clear = FALSE),
+            extensions='Buttons',
+            options=list(columnDefs= list(list(targets=c(4,5),searchable=F),
+                                          list(targets=c(4,5,3),width='10%')),
+                         dom='Bfrtip',
+                         #autoWidth = TRUE,
+                         buttons=list(list(extend='collection',
+                                      buttons=c('csv', 'excel', 'pdf'),
+                                      text='Download')))) %>% 
+    formatStyle('State',
+                  target = 'row',
+                  backgroundColor = styleEqual(c("Expected match","Expected unmatch","Unexpected unmatch","Unexpected match"),
+                                               c('#bee0bc',"#ADD0FF","#FBC87E","#F3A4A3")))
+}
+```
+    
+```{r per case summary table}
+#all_ind <-str_extract(all_samples,ind_regex) %>% unique()
+#all_ind = "MoHQ-CM-4-69"
+#colnames(data) <- c("Sample1","Sample2","cor")
+short_data <- data2[individual_match==TRUE]
+#short_data = short_data[grep(paste0(all_ind[i]),short_data$Sample1),]
+
+pair_types_to_report <- filter(sample_type_pairs_df,X1!=X2) %>% pull(pair_type) %>% unique()
+summary <- map(seq_along(all_ind),function(i) {
+
+ x <- short_data[grep(all_ind[i],short_data$Sample1),]
+correlation_summary <- group_by(x,pair_type) %>%
+  summarise(Correlation=paste(Correlation,collapse = ",")) %>%
+  filter(pair_type %in% pair_types_to_report)
+correlation_summary$Case <- all_ind[i]
+correlation_summary_wide <- pivot_wider(correlation_summary,names_from = pair_type,
+                                        values_from = Correlation)
+})
+
+summary <- bind_rows(summary)
+
+write.csv(summary,file.path(out,paste0("summary_table_NGSCM_",prefix,".csv")),row.names = F)
+
+ # DNvsDT <- list()
+# DNvsRT <- list()
+# DTvsRT <- list()
+# Score <- list()
+# 
+# 
+# ##
+# short_data[grep(all_ind[1],short_data$Sample1)]
+# ##0
+# for(i in 1:length(all_ind)){
+# #i=1
+# ##  
+#   vec = list()
+#   #DNvsDT
+#   samp1 <- grep(paste0(all_ind[i],"-.*DN.*"),as.character(short_data$Sample1))
+#   samp2 <- grep(paste0(all_ind[i],"-.*DT.*"),as.character(short_data$Sample2))
+#   
+#   idx <- intersect(samp1,samp2)
+#   
+#   samp1 <- grep(paste0(all_ind[i],"-.*DT.*"),as.character(short_data$Sample1))
+#   samp2 <- grep(paste0(all_ind[i],"-.*DN.*"),as.character(short_data$Sample2))
+#   idx <- c(idx,intersect(samp1,samp2))
+# 
+#   
+#   if(idx %>% length() != 0){
+#     values <- c()
+#     for(j in 1:length(idx)){
+#       if(short_data[idx[j],"State"] == "matched"){
+#         values[j] <- TRUE
+#       }else{
+#         values[j] <- FALSE
+#       }
+#     }
+#   DNvsDT[[i]] <- values
+#   }else{
+#     DNvsDT[[i]] <- NA
+#   }
+#   vec[[1]] <- short_data[idx,"Correlation"]$Correlation
+#   
+#   #DNvsRT
+#   samp1 <- grep(paste0(all_ind[i],"-.*DN.*"),as.character(short_data$Sample1))
+#   samp2 <- grep(paste0(all_ind[i],"-.*RT.*"),as.character(short_data$Sample2))
+#   
+#   idx <- intersect(samp1,samp2)
+#   
+#   samp1 <- grep(paste0(all_ind[i],"-.*RT.*"),as.character(short_data$Sample1))
+#   samp2 <- grep(paste0(all_ind[i],"-.*DN.*"),as.character(short_data$Sample2))
+#   idx <- c(idx,intersect(samp1,samp2))
+# 
+#   
+#   if(idx %>% length() != 0){
+#     values <- c()
+#     for(j in 1:length(idx)){
+#       if(short_data[idx[j],"State"] == "matched"){
+#         values[j] <- TRUE
+#       }else{
+#         values[j] <- FALSE
+#       }
+#     }
+#   DNvsRT[[i]] <- values
+#   }else{
+#     DNvsRT[[i]] <- NA
+#   }
+#   vec[[2]] <- short_data[idx,"Correlation"]$Correlation
+#   
+#   #DTvsRT
+#   samp1 <- grep(paste0(all_ind[i],"-.*DT.*"),as.character(short_data$Sample1))
+#   samp2 <- grep(paste0(all_ind[i],"-.*RT.*"),as.character(short_data$Sample2))
+#   
+#   idx <- intersect(samp1,samp2)
+#   
+#   samp1 <- grep(paste0(all_ind[i],"-.*RT.*"),as.character(short_data$Sample1))
+#   samp2 <- grep(paste0(all_ind[i],"-.*DT.*"),as.character(short_data$Sample2))
+#   
+#   idx <- c(idx,intersect(samp1,samp2))
+# 
+#   
+#   
+#   if(idx %>% length() != 0){
+#     values <- c()
+#     for(j in 1:length(idx)){
+#       if(short_data[idx[j],"State"] == "matched"){
+#         values[j] <- TRUE
+#       }else{
+#         values[j] <- FALSE
+#       }
+#     }
+#   DTvsRT[[i]] <- values
+#   }else{
+#     DTvsRT[[i]] <- NA
+#   }
+#   vec[[3]] <- short_data[idx,"Correlation"]$Correlation
+#   
+#   Score[[i]] <- vec
+# }
+# 
+# for(i in 1:length(Score)){
+#   string <- paste0('(',paste(Score[[i]][[1]],collapse = ","),'),',
+#                    '(',paste(Score[[i]][[2]],collapse = ","),'),',
+#                    '(',paste(Score[[i]][[3]],collapse = ","),')')
+#   Score[[i]] <- string
+#   DNvsDT[[i]] <- paste(DNvsDT[[i]],collapse = ",")
+#   DNvsRT[[i]] <- paste(DNvsRT[[i]],collapse = ",")
+#   DTvsRT[[i]] <- paste(DTvsRT[[i]],collapse = ",")
+# }
+# 
+# summary_table <- cbind(Case = all_ind, 
+#                        DNvsDT = unlist(DNvsDT), 
+#                        DNvsRT = unlist(DNvsRT), 
+#                        DTvsRT = unlist(DTvsRT), 
+#                        Score = unlist(Score))
+#write.csv(as.data.frame(summary_table),paste0(params$full_table,"summary_table_NGSCM_",params$prefix,".csv"),row.names = F)
+```
+
+## **All results**  
+```{r full results}
+
+data_print <- data2[,.(Sample1, Sample2, Correlation, State = final_match,Run1,Run2)]
+
+if(nrow(data_print)>20000){
+  write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM_",prefix,".csv")))
+  cat(paste0("Table is too large, full csv is saved here : **",out,"/AllComparisons_table_NGSCM.csv**","   \n"),sep="")
+  cat("This  tables shows the comparisons with expected unmatches  removed  \n")
+  
+
+datatable(data_print %>% filter(State!="Expected unmatch"),
+                 rownames = F,
+          class = c("display","nowrap"),
+              filter = list(position = 'top', clear = FALSE),
+              extensions = c("Buttons"),
+              options=list(columnDefs= list(list(targets=c(4,5),searchable=F),
+                                            list(targets=0,width='30%'),
+                                            list(targets=1,width='10%'),
+                                            list(targets=2,width='30%'),
+                                            list(targets=3,width='10%')),
+                           autoWidth = F,
+                           dom='Bfrtip',
+                           buttons=list( list(extend='collection',
+                                        buttons=c('csv', 'excel', 'pdf'),
+                                        text='Download')))) %>%
+      formatStyle('State',
+                    target = 'row',
+                    backgroundColor = styleEqual(c("Expected match","Unexpected unmatch","Unexpected match"),
+                                                 c('#bee0bc',"#FBC87E","#F3A4A3")))
+ 
+
+}else{
+write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM_",prefix,".csv")))  
+
+   datatable(data_print,
+             class = c("display","nowrap"),
+            rownames = F,         
+            filter = list(position = 'top', clear = FALSE),
+            extensions = c("SearchPanes", "Select","Buttons"),
+            selection = "none",
+            options=list(columnDefs= list(list(targets=c(4,5),searchable=F),
+                                          list(targets=c(4,5),width='10%')),
+                         #autoWidth = TRUE,
+                         dom='Bfrtip',
+                         language = list(searchPanes = list(collapse = "Filter Rows")),
+                         buttons=list("searchPanes",
+                                      list(extend='collection',
+                                      buttons=c('csv', 'excel', 'pdf'),
+                                      text='Download')))) %>%
+    formatStyle('State',
+                  target = 'row',
+                  backgroundColor = styleEqual(c("Expected match","Expected unmatch","Unexpected unmatch","Unexpected match"),
+                                               c('#bee0bc',"#ADD0FF","#FBC87E","#F3A4A3")))
+
+  
+
+  }
+
+```
+  
+
+  
+
+  
+# **Suspicious cases dendrogram** 
+   
+This Dendrogram highlights samples of all individuals with at least one sample in the trio that didn't match.  
+
+```{r,warning=FALSE,fig.show="hold", out.width="100%"}
+library('dendextend')
+
+#We need to extract all samples of individuals that didn't match
+#We take all the comparison and count, get ind ID that don't have 3 match
+# filter full data tqble to keep comparisons different than 0 from all these individuals
+
+suspicious_data <- data2[str_detect(final_match,"Unexpected"),]
+suspicious_ind <- unique(c(suspicious_data$ind1,suspicious_data$ind2))
+
+same_ind <- data2[individual_match==TRUE]
+suspicious_ind_data <- same_ind[ind1 %in% suspicious_ind]
+#count_trio <- table(same_ind$ind1) %>% as.data.frame() %>% filter(Freq < 3)
+#trio_unmatched <- count_trio$Var1 %>% as.character() %>% unique()
+
+#data_ind <- data[grep(paste(trio_unmatched,collapse="|"),data$Sample1),]
+#filter=data_ind %>% filter(State %in% c("Expected match","Unexpected match"))
+#wrong <- data_matched %>% filter(str_extract(V1,"^MoHQ-.*?-.*?-.*?-")%>% gsub("-$","",.) != str_extract(V3,"^MoHQ-.*?-.*?-.*?-") %>% gsub("-$","",.))
+wrong_id <- unique(c(suspicious_data$Sample1,suspicious_data$Sample2))
+
+#Construction of hclust input matrix
+sample_names <- unique(c(suspicious_ind_data$Sample1,suspicious_ind_data$Sample2))
+AllMatrix <- matrix(0,nrow = length(sample_names),ncol = length(sample_names))
+colnames(AllMatrix) = rownames(AllMatrix) = sample_names
+
+for (i in 1:nrow(suspicious_ind_data)){
+  sample1 = grep(suspicious_ind_data[i,1],sample_names)
+  sample2 = grep(suspicious_ind_data[i,2], sample_names)
+  AllMatrix[sample1,sample2] <- suspicious_ind_data[i,3] %>% as.numeric()
+}
+
+#Make the matrix symetric
+AllMatrix[lower.tri(AllMatrix)]<-t(AllMatrix)[lower.tri(AllMatrix)]
+diag(AllMatrix) = 0
+
+d3 <- as.dist((1 - AllMatrix))
+
+clust3 <- hclust(d3, method = "average")
+dend <- as.dendrogram(clust3)
+
+
+labels_colors(dend) <- ifelse(labels(dend) %in% wrong_id, "#CE2B17", "black")
+dend <- set(dend, "labels_cex", 0.5)
+#groups <-  ifelse(labels(dend) %in% wrong_id, "#CE2B17", "black")
+#clusters <- as.numeric(factor(groups))
+
+par(mar=c(6, 3, 1, 1) + 0.1)
+plot(dend)
+```
+
+```{r,include=FALSE}
+sessionInfo()
+```
+
+
+
