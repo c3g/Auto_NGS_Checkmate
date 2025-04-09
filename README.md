@@ -61,3 +61,4 @@ if a regexes.csv file was provided:
 - make reports accessible to interested parties (ie for MOH, Pascale) 
 - should there be a section called "New Samples"?
 - should the ncm files be copied or linked?
+- Dendrogram
