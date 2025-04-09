@@ -18,6 +18,11 @@ library(tidyverse)
 library(data.table)
 library(RColorBrewer)
 library(DT)
+library(yaml)
+library(tidyverse)
+library(data.table)
+library(RColorBrewer)
+library(DT)
 library(ggplot2)
 library(knitr)
 library(stringr)
@@ -32,9 +37,6 @@ cor_thres <- config$cor_thres
 prefix <- config$prefix
 project_name <- config$project_name
 
--------
-title: "Project `r project_name`  NGSCheckMate Report"
--------
 
 ## import regex
 regexes <- read.csv("regexes.csv",header=F)
@@ -47,6 +49,9 @@ sample_regexes <- sample_regexes_df$V2
 names(sample_regexes) <- sample_regexes_df$V1
 
 ```
+---
+title: "Project `r project_name`  NGSCheckMate Report"
+---
 
 
 ```{r parsing,results='hide'}
@@ -173,7 +178,7 @@ ggplot(aes(x=Correlation,fill=pair_type)) +
 ```
   
 # **Concordance tables** 
-## **New suspicious results**  
+## **New suspicious results (since last run of the report)**  
  
 
 ```{r extract new suspicious results}
@@ -247,7 +252,7 @@ short_data <- data2[individual_match==TRUE]
 pair_types_to_report <- filter(sample_type_pairs_df,X1!=X2) %>% pull(pair_type) %>% unique()
 summary <- map(seq_along(all_ind),function(i) {
 
- x <- short_data[grep(all_ind[i],short_data$Sample1),]
+ x <- short_data[short_data$ind1==all_ind[i],]
 correlation_summary <- group_by(x,pair_type) %>%
   summarise(Correlation=paste(Correlation,collapse = ",")) %>%
   filter(pair_type %in% pair_types_to_report)
@@ -258,7 +263,7 @@ correlation_summary_wide <- pivot_wider(correlation_summary,names_from = pair_ty
 
 summary <- bind_rows(summary)
 
-write.csv(summary,file.path(out,paste0("summary_table_NGSCM_",prefix,".csv")),row.names = F)
+write.csv(summary,file.path(out,paste0("summary_table_NGSCM.csv")),row.names = F)
 
  # DNvsDT <- list()
 # DNvsRT <- list()
@@ -371,16 +376,16 @@ write.csv(summary,file.path(out,paste0("summary_table_NGSCM_",prefix,".csv")),ro
 #                        DNvsRT = unlist(DNvsRT), 
 #                        DTvsRT = unlist(DTvsRT), 
 #                        Score = unlist(Score))
-#write.csv(as.data.frame(summary_table),paste0(params$full_table,"summary_table_NGSCM_",params$prefix,".csv"),row.names = F)
+#write.csv(as.data.frame(summary_table),paste0(params$full_table,"summary_table_NGSCM.csv"),row.names = F)
 ```
 
 ## **All results**  
 ```{r full results}
 
-data_print <- data2[,.(Sample1, Sample2, Correlation, State = final_match,Run1,Run2)]
+data_print <- data2[,.(Sample1, Run1, Sample2, Run2, Correlation, State = final_match)]
 
 if(nrow(data_print)>20000){
-  write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM_",prefix,".csv")))
+  write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM.csv")))
   cat(paste0("Table is too large, full csv is saved here : **",out,"/AllComparisons_table_NGSCM.csv**","   \n"),sep="")
   cat("This  tables shows the comparisons with expected unmatches  removed  \n")
   
@@ -390,11 +395,7 @@ datatable(data_print %>% filter(State!="Expected unmatch"),
           class = c("display","nowrap"),
               filter = list(position = 'top', clear = FALSE),
               extensions = c("Buttons"),
-              options=list(columnDefs= list(list(targets=c(4,5),searchable=F),
-                                            list(targets=0,width='30%'),
-                                            list(targets=1,width='10%'),
-                                            list(targets=2,width='30%'),
-                                            list(targets=3,width='10%')),
+              options=list(columnDefs= list(list(targets=c(1,3),searchable=F)),
                            autoWidth = F,
                            dom='Bfrtip',
                            buttons=list( list(extend='collection',
@@ -407,7 +408,7 @@ datatable(data_print %>% filter(State!="Expected unmatch"),
  
 
 }else{
-write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM_",prefix,".csv")))  
+write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM.csv")),row.names=F)  
 
    datatable(data_print,
              class = c("display","nowrap"),

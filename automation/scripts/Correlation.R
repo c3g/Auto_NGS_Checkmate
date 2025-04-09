@@ -20,7 +20,7 @@ ncm_list <- rbind(old_list,new_list)
  ncm_list <- new_list
 }
 
-
+ncm_list <- distinct(ncm_list)
 ncm_files <- list.files(path=opt$ncm_directory,pattern="ncm",full.names=T)
 ncm <- lapply(ncm_files,read.delim)
 names(ncm) <- gsub(".ncm","",basename(ncm_files))
@@ -73,6 +73,7 @@ data$Correlation <- round(data$Correlation,4)
 dirs <- data.frame(Readset=paste0(ncm_list$sample_name,"_L00",ncm_list$lane),Run=ncm_list$run_name)
 
 duplicates <- dirs[duplicated(dirs$Readset)|duplicated(dirs$Readset,fromLast = T),]
+duplicates <- duplicates[sort(duplicates$Readset),]
 if(nrow(duplicates)>0) {
   cat("dataset contains readsets from muliple runs")
   print(duplicates)

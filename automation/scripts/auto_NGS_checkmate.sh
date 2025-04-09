@@ -10,15 +10,15 @@ then
     exit
 fi
 
-#01 0 * * 1,3,5 source $HOME/.bash_profile; bash -l /lb/robot/research/DOvEE/automation/scripts/auto_DOvEE_vardict.sh /lb/robot/research/DOvEE/automation/latest_readsets /lb/robot/research/DOvEE/processing > /lb/robot/research/DOvEE/automation/logs/cron_vardict.log 2>&1
+#01 0 * * 1 source $HOME/.bash_profile; bash -l /lb/robot/research/NGSCM/automation/scripts/auto_ngscheckmate.sh/lb/robot/research/NGSCM/processing > /lb/robot/research/NGSCM/automation/logs/cron_ngscm.log 2>&1
 ########################################################
 # Set file paths
-#OUTPUT_PATH=$(dirname $( dirname $( realpath $0 )))
-OUTPUT_PATH=/lb/project/C3G/projects/Danielle/NGScheckmate_report/test
+OUTPUT_PATH=$(dirname $( dirname $( realpath $0 )))
+#OUTPUT_PATH=/lb/project/C3G/projects/Danielle/NGScheckmate_report/test2
 RUN_PATH=/nb/Research/freezeman-processing # where to look for new runs 
-#RUN_PATH=/lb/project/C3G/projects/Danielle/NGScheckmate_report/test/run_dir/
-#ANALYSIS_PATH=$(realpath ${1}) # where to the project directories
-ANALYSIS_PATH=/lb/project/C3G/projects/Danielle/NGScheckmate_report/test
+#RUN_PATH=/lb/project/C3G/projects/Danielle/NGScheckmate_report/test/run_dir
+ANALYSIS_PATH=$(realpath ${1}) # where to the project directories
+#ANALYSIS_PATH=/lb/project/C3G/projects/Danielle/NGScheckmate_report/test2
 INSTRUMENTS="novaseq novaseqx"
 
 #########################################################
@@ -48,14 +48,15 @@ done
 module purge && \
 module load mugqic/python/3.12.2
 
-json=$(ls $RUN_PATH/$seq/20${YEAR}/$NEW_RUN/${RUN_NAME}*.json)
+json=$(ls $RUN_PATH/$seq/20${YEAR}/$NEW_RUN/*${RUN_NAME}*.json 2>/dev/null)
 if [ -f "$json" ];
 then
 python scripts/parse_json.py \
-    --json $RUN_PATH/$seq/20${YEAR}/$NEW_RUN/${RUN_NAME}*.json \
+    --json "$json" \
     --out $OUTPUT_PATH/${RUN_NAME}_Samples.csv
 else
 	echo "no runInfo file for $NEW_RUN"
+	return 1
 fi
 
 #################################################
@@ -127,7 +128,13 @@ PROJECT_LIST=$(cat *Samples.csv | cut -f2 -d,| sort -u)
 for project in $PROJECT_LIST
 do
     cd $ANALYSIS_PATH/Project_${project}
-    project_name=$(cut -f3 -d, New_Samples.csv | sort -u) 	
+    if [ "$project" == "MoHQ" ]
+    then
+	project_name="MoHQ"
+   else
+ 
+   	project_name=$(cut -f3 -d, New_Samples.csv | sort -u) 	
+   fi
     if [ ! -f "Config.yaml" ]
     then
 	cat << EOF > Config.yaml
@@ -225,6 +232,7 @@ rm new.runs.tmp
 ####                               |--sample.ncm
 #####                            |-- correlation.rds 
 ####                             |-- ngs_checkmate.Rmd
-
+####                             |-- Config.yaml
+####                             |-- regexes.csv 
 
 
