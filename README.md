@@ -3,22 +3,22 @@
 3. if a file "regexes.csv" exists, then the checkmate.out.Rmd file is run to generate a report of the NGS checkmate results.
 
 Directory structure:
-ngscheckmate_home
-            |-- automation (OUTPUT_PATH)
-                     |-- scripts
-                     |-- logs
-            |-- processing (ANALYSIS_PATH)
-                     |-- project_01
-                     |-- project_02
-                            |-- New_Samples.csv
-                            |-- Processed_Samples.csv
-                            |-- ncm_files
-                              |--sample_lane.ncm
-                            |-- Correlation.rds
-                            |-- checkmate_out.Rmd 
-                            |-- checkmate_out.html
-                            |-- AllComparisons_table_NGSCM_.csv
-			    |-- summary_table_NGSCM.csv	
+ngscheckmate_home\
+            |-- automation\
+                     |-- scripts\
+                     |-- logs\
+            |-- processing\
+                     |-- project_01\
+                     |-- project_02\
+                            |-- New_Samples.csv\
+                            |-- Processed_Samples.csv\
+                            |-- ncm_files\
+                              |--sample_lane.ncm\
+                            |-- Correlation.rds\
+                            |-- checkmate_out.Rmd\ 
+                            |-- checkmate_out.html\
+                            |-- AllComparisons_table_NGSCM_.csv\
+			    |-- summary_table_NGSCM.csv\	
 
 
 
