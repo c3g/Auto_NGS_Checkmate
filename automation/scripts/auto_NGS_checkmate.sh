@@ -10,7 +10,7 @@ then
     exit
 fi
 
-#01 0 * * 1 source $HOME/.bash_profile; bash -l /lb/robot/research/NGSCM/automation/scripts/auto_ngscheckmate.sh/lb/robot/research/NGSCM/processing > /lb/robot/research/NGSCM/automation/logs/cron_ngscm.log 2>&1
+#01 0 * * 1 source $HOME/.bash_profile; bash -l /lb/robot/research/NGSCM/automation/scripts/auto_ngscheckmate.sh /lb/robot/research/NGSCM/proc > /lb/robot/research/NGSCM/automation/logs/cron_ngscm.log 2>&1
 ########################################################
 # Set file paths
 OUTPUT_PATH=$(dirname $( dirname $( realpath $0 )))
@@ -31,11 +31,23 @@ function process_run {
 #######################################################
 ## Checking if ncm files in the new run have finished generating
 
-for f in $RUN_PATH/$seq/20${YEAR}/$NEW_RUN/job_output/check_sample_mixup/sample_mixup.ngscheckmate_by_lane*sh; do
+RUN_FOLDER=$(ls -d $RUN_PATH/*/*/$NEW_RUN)
+
+n_checkmate_scripts=$(ls ${RUN_FOLDER}/job_output/check_sample_mixup/sample_mixup.ngscheckmate_by_lane*sh 2>/dev/null | wc -l)
+
+if [ "$n_checkmate_scripts" -eq 0 ]; then
+ 	echo "NGSCheckmate not run for $NEW_RUN"
+        echo $NEW_RUN >> $OUTPUT_PATH/done/done_SS.txt
+        return 1
+fi
+for f in ${RUN_FOLDER}/job_output/check_sample_mixup/sample_mixup.ngscheckmate_by_lane*sh; do
 
     echo $f
+
      lane=$(basename $f | cut -d_ -f5 )
-    if [ -f "$RUN_PATH/$seq/20${YEAR}/$NEW_RUN/job_output/checkpoint/check_sample_mixup.${RUN_NAME}.${lane}.stepDone" ]; then
+     done_file=$(ls ${RUN_FOLDER}/job_output/check_sample_mixup/sample_mixup.ngscheckmate_by_lane_${lane}.*done 2>/dev/null)
+
+    if [ -f "$done_file" ]; then
         echo -e "Files for $RUN_NAME lane $lane have finished processing."
     else
         echo -e "Files for $RUN_NAME lane  $lane have not yet finished processing. Trying again later."
@@ -48,7 +60,7 @@ done
 module purge && \
 module load mugqic/python/3.12.2
 
-json=$(ls $RUN_PATH/$seq/20${YEAR}/$NEW_RUN/*${RUN_NAME}*.json 2>/dev/null)
+json=$(ls ${RUN_FOLDER}/*${RUN_NAME}*.json 2>/dev/null)
 if [ -f "$json" ];
 then
 python scripts/parse_json.py \
