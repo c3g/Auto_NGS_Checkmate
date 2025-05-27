@@ -21,6 +21,7 @@ ncm_list <- rbind(old_list,new_list)
 }
 
 ncm_list <- distinct(ncm_list)
+ncm_list <- ncm_list[!str_detect(ncm_list$ncm_path,"manual_launch"),]
 ncm_files <- list.files(path=opt$ncm_directory,pattern="ncm",full.names=T)
 ncm <- lapply(ncm_files,read.delim)
 names(ncm) <- gsub(".ncm","",basename(ncm_files))
@@ -30,7 +31,7 @@ if(length(ncm)!=nrow(ncm_list)) {
 warning(paste(length(ncm),"ncm files are present and", nrow(ncm_list), "ncm files are listed"))
 missing_from_list <- names(ncm)[!names(ncm) %in% samples_from_list]
 missing_files <- samples_from_list[!samples_from_list %in% names(ncm)]
-message("samples missing from csv:\n")
+message("samples missing from csv:")
 print(missing_from_list)
 message("files missing \n")
 print(missing_files)
@@ -52,7 +53,12 @@ ncm <- lapply(ncm,function(x) x[,"vaf"])
 ncm_matrix <-do.call(cbind,ncm)
 #colnames(ncm_matrix) <- gsub(".vaf","",colnames(ncm_matrix))
 #ncm_matrix <- vaf_matrix
+start.time <- Sys.time()
 corr <- rcorr(ncm_matrix)
+end.time <- Sys.time()
+print("Time for correlation:")
+time.taken <- end.time - start.time
+print(time.taken)
 
 flattenCorrMatrix <- function(cormat) {
   ut <- upper.tri(cormat)
@@ -73,28 +79,36 @@ data$Correlation <- round(data$Correlation,4)
 dirs <- data.frame(Readset=paste0(ncm_list$sample_name,"_L00",ncm_list$lane),Run=ncm_list$run_name)
 
 duplicates <- dirs[duplicated(dirs$Readset)|duplicated(dirs$Readset,fromLast = T),]
-duplicates <- duplicates[sort(duplicates$Readset),]
+duplicates <- duplicates[order(duplicates$Readset),]
 if(nrow(duplicates)>0) {
-  cat("dataset contains readsets from muliple runs")
+  cat("dataset contains readsets from muliple runs\n")
   print(duplicates)
   cat("will assign first run")
 }
 
 setDT(data)
 
+
 #
 data[, `:=`(Sample1 = str_remove(Readset1, "_*L00[1-8]_*"),
             Sample2 = str_remove(Readset2, "_*L00[1-8]_*"))]
 
 data <- data[Sample1!=Sample2]           
+start.time <- Sys.time()
 data[,`:=`(Run1 = sapply(Readset1, function(x) dirs[dirs$Readset == x, "Run"][1]),
            Run2 = sapply(Readset2, function(x) dirs[dirs$Readset == x, "Run"][1]))]
-
-
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print("Time for adding Run: ")
+print (time.taken)
 data2 <- data[, .(Correlation = min(Correlation),
                   Run1 = unique(Run1),
                   Run2 = unique(Run2)),
               by = .(Sample1, Sample2)]
 
-
+start.time <- Sys.time()
 saveRDS(data2,file = opt$out) 
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print("Time for saving object: ")
+print (time.taken)

@@ -6,6 +6,8 @@ output:
     toc_float: true	
     code_folding: hide
     df_print: paged
+params:
+    args: ' '
 ---
 
 ```{r setup, include=FALSE}
@@ -28,10 +30,11 @@ library(knitr)
 library(stringr)
 library(Hmisc)
 library(gtools) ## permutations
+library(igraph)
 ```
 
 ```{r params}
-config <- yaml.load_file("Config.yaml")
+config <- yaml.load_file(params$args)
 out <- config$outpath
 cor_thres <- config$cor_thres
 prefix <- config$prefix
@@ -39,7 +42,7 @@ project_name <- config$project_name
 
 
 ## import regex
-regexes <- read.csv("regexes.csv",header=F)
+regexes <- read.csv(file.path(out,"regexes.csv"),header=F)
 if (!any(str_detect(regexes$V1,"individual"))) {stop("regex for individual must be specified")}
 ind_regex <- filter(regexes,str_detect(V1,"individual")) %>% pull(V2)
 sample_regexes_df <- filter(regexes,!str_detect(V1,"individual"))
@@ -61,6 +64,7 @@ title: "Project `r project_name`  NGSCheckMate Report"
 ### add directory here
 data2 <- readRDS(file.path(out,"Correlation.rds"))
 
+#data2 <- readRDS("Correlation.rds")
 
 
 
@@ -131,9 +135,9 @@ all_ind <- str_extract(all_samples,ind_regex) %>% unique()
 
 
 ## 
-is.complete <- function(vector_ind,all_samples){
- 
-  ifelse(all(map_lgl(sample_regexes,function(r) {!is_empty(grep(r,all_samples[grep(vector_ind,all_samples)]))})),TRUE,FALSE)
+is.complete <- function(ind,all_samples){
+  
+  ifelse(all(map_lgl(sample_regexes,function(r) {!is_empty(grep(r,all_samples[grep(paste0(ind,"-"),all_samples)]))})),TRUE,FALSE)
   
 }
 
@@ -185,7 +189,7 @@ ggplot(aes(x=Correlation,fill=pair_type)) +
 data_print <- data2[final_match %in% c("Unexpected match", "Unexpected unmatch"),
                     .(Sample1, Run1,Sample2, Run2,Correlation, State = final_match)]
 
-new <- read.csv("New_Samples.csv",header=F)
+new <- read.csv(file.path(out,"New_Samples.csv"),header=F)
 new_samples <- new$V1
 
 data_print <- data_print[Sample1 %in% new_samples | Sample2 %in% new_samples]
@@ -493,6 +497,36 @@ dend <- set(dend, "labels_cex", 0.5)
 par(mar=c(6, 3, 1, 1) + 0.1)
 plot(dend)
 ```
+
+
+```{r}
+
+
+problem_files <- list.files(path=out,pattern = "ngscmproblems",full.names = T)
+if(length(problem_files)>0) {
+  file.remove(problem_files)
+}
+if(n_mismatch>0) {
+data_print <- data2[,.(Sample1, Case1=ind1,Run1, Sample2, Case2=ind2,Run2, Correlation, State = final_match)]
+
+x = data_print %>% filter(!is.na(State)) %>% filter(State %in% c("Unexpected unmatch","Unexpected match"))
+x = c(rbind(x$"Case1",x$"Case2"))
+g <- make_graph( edges=x, directed=F ) 
+plot(g) # A simple plot of the network - we'll talk more about plots later
+components = components(g)$"membership" %>% as.data.frame
+components$"Case" = rownames(components)
+components = tapply(components$"Case",INDEX=components$".",FUN=function(z){z})
+problems = lapply(components,function(z){
+	data_print[data_print$"Case1" %in% z & data_print$"Case2" %in% z,] %>% arrange(desc(`State`)) %>% relocate(`Sample1`,`Sample2`,`State`)
+})
+
+map2(problems,names(problems), ~write.csv(.x,file.path(out,paste0("ngscmproblems_",.y,".csv")),row.names=F))
+}
+```
+
+
+
+
 
 ```{r,include=FALSE}
 sessionInfo()
