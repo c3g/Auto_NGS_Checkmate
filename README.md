@@ -1,34 +1,15 @@
+usage: 0 6 * * 1 bash -l automation/scripts/auto_NGS_checkmate.sh /lb/robot/research/freezeman-processing/NGS_Checkmate_Reports > automation/logs/cron_ngsm.txt 2>&1 &
+
 This repository contains scripts to automatically detect new NGS checkmate files (ncm) generated from genpipes runprocessing pipeline, and calculate correlations based on predefined sets of samples.
 
 ## Steps
-1. At a determined frequency ie once a week, (TBD), the auto_NGS_checkmate.sh will look for new runs that have passed the NGS checkmate step for all lanes, and using the information from the run json, create directories for each project contained in the run, and copy the ncm files. minor exception is the "MOH" project- samples will be placed in the Project_MoHQ folder based on file name, not the project listed in the run json. 
-2. on all project directories with newly added samples, and the script Correlation.R is run calculate the correlation between readsets. The script will check if each ncm file as the correct number of rows (21039). If samples contain multiple readsets (ex sequenced on multiple lanes), the lowest correlation will be will be used as a representative. Output is a dataframe saved as a  *rds object.
-3. if a file "regexes.csv" exists, then the checkmate.out.Rmd file is run to generate a report of the NGS checkmate results.
+1. Once a week, the auto_NGS_checkmate.sh will look for new runs that have passed the NGS checkmate step for all lanes, and using the information from the run json, create directories for each project contained in the run, and copy the ncm files. Large scale projects like "MOH" project that emcompass multiple freezeman projects can be also be  - samples will be defined. 
 
-Directory structure:
-``` bash
-ngscheckmate_home
-            |-- automation
-                     |-- scripts
-                     |-- logs
-            |-- processing
-                     |-- project_01
-                            |-- Correlation.rds
-                            |-- New_Samples.csv
-                            |-- ncm_files
-				|-- sample_lane.ncm
-                     |-- project_MoHQ
-                            |-- New_Samples.csv
-                            |-- Processed_Samples.csv
-                            |-- ncm_files
-                              |--sample_lane.ncm
-                            |-- Correlation.rds
-                            |-- checkmate_out.Rmd 
-                            |-- checkmate_out.html
-                            |-- AllComparisons_table_NGSCM_.csv
-			    |-- summary_table_NGSCM.csv	
+2. on all project directories with newly added samples, and the script Correlation.R is run calculate the correlation between readsets. The script will check if each ncm file as the correct number of rows (21039). If samples contain multiple readsets (ex sequenced on multiple lanes), the lowest correlation will be will be used as a representative. Output is a dataframe saved as a "rds" object.
 
-```
+3. if  the file "regexes.csv" exists in the project directory, then the checkmate.out.Rmd file is run to generate a report of the NGS checkmate results.
+
+
 
 Currently the pipeline will check for new novaseq and novaseqx runs 
 
@@ -54,11 +35,19 @@ if a regexes.csv file was provided:
 |MoHQ-CM-21-7 | 0.9313| 0.8871| 0.8728 | 
 
 
-### TO-DO, etc
-- samples in multiple runs
-- missing samples or files
-- set-up user
-- make reports accessible to interested parties (ie for MOH, Pascale) 
-- should there be a section called "New Samples"?
-- should the ncm files be copied or linked?
-- Dendrogram
+Other configuration files:
+
+project_blacklist.txt - list of projects for which ngscheckmate should not be run:
+```
+head project_blacklist.txt
+71
+```
+email_config.txt - list of emails that should be sent when report is updated
+
+project_regexes.txt - list of projects with sample regexes.txt, first column is project name, and second column is sample name regexes
+```
+head project_regexes.txt
+MoHQ MoHQ
+```
+
+usage: 0 6 * * 1 bash -l automation/scripts/auto_NGS_checkmate.sh /lb/robot/research/freezeman-processing/NGS_Checkmate_Reports > automation/logs/cron_ngsm.txt 2>&1 &
