@@ -50,4 +50,3 @@ head project_regexes.txt
 MoHQ MoHQ
 ```
 
-usage: 0 6 * * 1 bash -l automation/scripts/auto_NGS_checkmate.sh /lb/robot/research/freezeman-processing/NGS_Checkmate_Reports > automation/logs/cron_ngsm.txt 2>&1 &

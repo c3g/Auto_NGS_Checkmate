@@ -137,7 +137,7 @@ all_ind <- str_extract(all_samples,ind_regex) %>% unique()
 ## 
 is.complete <- function(ind,all_samples){
   
-  ifelse(all(map_lgl(sample_regexes,function(r) {!is_empty(grep(r,all_samples[grep(paste0(ind,"-"),all_samples)]))})),TRUE,FALSE)
+  ifelse(all(map_lgl(sample_regexes,function(r) {!is_empty(grep(r,all_samples[grep(ind,all_samples)]))})),TRUE,FALSE)
   
 }
 
@@ -444,62 +444,61 @@ write.csv(data_print,file.path(out,paste0("AllComparisons_table_NGSCM.csv")),row
   
 
   
-# **Suspicious cases dendrogram** 
+# **Suspicious cases network graph** 
    
-This Dendrogram highlights samples of all individuals with at least one sample in the trio that didn't match.  
 
 ```{r,warning=FALSE,fig.show="hold", out.width="100%"}
-library('dendextend')
+#library('dendextend')
 
 #We need to extract all samples of individuals that didn't match
 #We take all the comparison and count, get ind ID that don't have 3 match
 # filter full data tqble to keep comparisons different than 0 from all these individuals
 
-suspicious_data <- data2[str_detect(final_match,"Unexpected"),]
-suspicious_ind <- unique(c(suspicious_data$ind1,suspicious_data$ind2))
+#suspicious_data <- data2[str_detect(final_match,"Unexpected"),]
+#suspicious_ind <- unique(c(suspicious_data$ind1,suspicious_data$ind2))
 
-same_ind <- data2[individual_match==TRUE]
-suspicious_ind_data <- same_ind[ind1 %in% suspicious_ind]
+#same_ind <- data2[individual_match==TRUE]
+#suspicious_ind_data <- same_ind[ind1 %in% suspicious_ind]
 #count_trio <- table(same_ind$ind1) %>% as.data.frame() %>% filter(Freq < 3)
 #trio_unmatched <- count_trio$Var1 %>% as.character() %>% unique()
 
 #data_ind <- data[grep(paste(trio_unmatched,collapse="|"),data$Sample1),]
 #filter=data_ind %>% filter(State %in% c("Expected match","Unexpected match"))
 #wrong <- data_matched %>% filter(str_extract(V1,"^MoHQ-.*?-.*?-.*?-")%>% gsub("-$","",.) != str_extract(V3,"^MoHQ-.*?-.*?-.*?-") %>% gsub("-$","",.))
-wrong_id <- unique(c(suspicious_data$Sample1,suspicious_data$Sample2))
+#wrong_id <- unique(c(suspicious_data$Sample1,suspicious_data$Sample2))
 
 #Construction of hclust input matrix
-sample_names <- unique(c(suspicious_ind_data$Sample1,suspicious_ind_data$Sample2))
-AllMatrix <- matrix(0,nrow = length(sample_names),ncol = length(sample_names))
-colnames(AllMatrix) = rownames(AllMatrix) = sample_names
+#sample_names <- unique(c(suspicious_ind_data$Sample1,suspicious_ind_data$Sample2))
+#AllMatrix <- matrix(0,nrow = length(sample_names),ncol = length(sample_names))
+#colnames(AllMatrix) = rownames(AllMatrix) = sample_names
 
-for (i in 1:nrow(suspicious_ind_data)){
-  sample1 = grep(suspicious_ind_data[i,1],sample_names)
-  sample2 = grep(suspicious_ind_data[i,2], sample_names)
-  AllMatrix[sample1,sample2] <- suspicious_ind_data[i,3] %>% as.numeric()
-}
-
-#Make the matrix symetric
-AllMatrix[lower.tri(AllMatrix)]<-t(AllMatrix)[lower.tri(AllMatrix)]
-diag(AllMatrix) = 0
-
-d3 <- as.dist((1 - AllMatrix))
-
-clust3 <- hclust(d3, method = "average")
-dend <- as.dendrogram(clust3)
-
-
-labels_colors(dend) <- ifelse(labels(dend) %in% wrong_id, "#CE2B17", "black")
-dend <- set(dend, "labels_cex", 0.5)
-#groups <-  ifelse(labels(dend) %in% wrong_id, "#CE2B17", "black")
-#clusters <- as.numeric(factor(groups))
-
-par(mar=c(6, 3, 1, 1) + 0.1)
-plot(dend)
+#for (i in 1:nrow(suspicious_ind_data)){
+#  sample1 = grep(suspicious_ind_data[i,1],sample_names)
+#  sample2 = grep(suspicious_ind_data[i,2], sample_names)
+#  AllMatrix[sample1,sample2] <- suspicious_ind_data[i,3] %>% as.numeric()
+#}
+#
+##Make the matrix symetric
+#AllMatrix[lower.tri(AllMatrix)]<-t(AllMatrix)[lower.tri(AllMatrix)]
+#diag(AllMatrix) = 0
+#
+#d3 <- as.dist((1 - AllMatrix))
+#
+#clust3 <- hclust(d3, method = "average")
+#dend <- as.dendrogram(clust3)
+#
+#
+#labels_colors(dend) <- ifelse(labels(dend) %in% wrong_id, "#CE2B17", "black")
+#dend <- set(dend, "labels_cex", 0.5)
+##groups <-  ifelse(labels(dend) %in% wrong_id, "#CE2B17", "black")
+##clusters <- as.numeric(factor(groups))
+#
+#par(mar=c(6, 3, 1, 1) + 0.1)
+#plot(dend)
 ```
 
 
-```{r}
+```{r, results='hide'}
 
 
 problem_files <- list.files(path=out,pattern = "ngscmproblems",full.names = T)
@@ -528,9 +527,6 @@ map2(problems,names(problems), ~write.csv(.x,file.path(out,paste0("ngscmproblems
 
 
 
-```{r,include=FALSE}
-sessionInfo()
-```
 
 
 

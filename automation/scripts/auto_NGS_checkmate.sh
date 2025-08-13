@@ -25,7 +25,7 @@ INSTRUMENTS="novaseq novaseqx"
 # Functions
 
 function copy_ncm_files {  
-  RUN_NAME=$( echo $NEW_RUN | awk -F'_' '{print $2"_"$3}')
+  RUN_ID=$( echo $NEW_RUN | awk -F'_' '{print $2"_"$3}')
 #######################################################
 ## Checking if ncm files in the new run have finished generating
 
@@ -46,9 +46,9 @@ for i in $lanes; do
      done_file=$(ls -1rt ${RUN_FOLDER}/job_output/check_sample_mixup/sample_mixup.ngscheckmate_by_lane_${i}.*done 2>/dev/null | tail -n 1)
 
     if [ -f "$done_file" ]; then
-        echo -e "Files for $RUN_NAME lane $i have finished processing."
+        echo -e "Files for $RUN_ID lane $i have finished processing."
     else
-        echo -e "Files for $RUN_NAME lane  $i have not yet finished processing. Trying again later."
+        echo -e "Files for $RUN_ID lane  $i have not yet finished processing. Trying again later."
         return 1
     fi
 done
@@ -58,12 +58,21 @@ done
 module purge && \
 module load mugqic/python/3.12.2
 
-json=$(ls -1rt ${RUN_FOLDER}/*${RUN_NAME}*.json 2>/dev/null | tail -n 1)
+## find run info
+seqtype=$(echo $NEW_RUN | rev | cut -f1 -d- | rev)
+if [ "$seqtype" == "miseq" ]
+then
+	fcid=$(echo $NEW_RUN | cut -f4 -d"_" | cut -f2 -d-)
+else
+	fcid=$(echo $NEW_RUN | cut -f4 -d"_" | cut -f1 -d- | cut -c2-)
+fi
+echo $fcid
+json=$(grep -l $fcid ~/freezeman-lims-run-info/*json | tail -n 1)
 ## if json is in manual launch
 
-if [ ! -f "$json" ]; then
-json=$(ls -1rt ${RUN_FOLDER}/manual_launch/*${RUN_NAME}*.json 2>/dev/null | tail -n 1)
-fi
+#if [ ! -f "$json" ]; then
+#json=$(ls -1rt ${RUN_FOLDER}/manual_launch/*${RUN_ID}*.json 2>/dev/null | tail -n 1)
+#fi
 
 echo "$json" 
 if [ -f "$json" ];
@@ -71,7 +80,7 @@ then
 python scripts/parse_json.py \
     --json "$json" \
     --regex $OUTPUT_PATH/project_regexes.txt \
-    --out $OUTPUT_PATH/${RUN_NAME}_Samples.csv
+    --out $OUTPUT_PATH/${RUN_ID}_Samples.csv
 else
 	echo "no runInfo file for $NEW_RUN"
 	return 1
@@ -97,7 +106,7 @@ do
     echo $line >>  $ANALYSIS_PATH/Project_${projectid}/New_Samples.csv
     cp -v $path $ANALYSIS_PATH/Project_${projectid}/ncm_files/${sample}_L00${lane}.ncm
    fi  
-done < $OUTPUT_PATH/${RUN_NAME}_Samples.csv                         
+done < $OUTPUT_PATH/${RUN_ID}_Samples.csv                         
 
 }
 
@@ -113,56 +122,56 @@ echo -e "Detecting runs...\n"
 
 for i in $INSTRUMENTS
 do
-	find -L ${RUN_PATH}/$i -mindepth 2 -maxdepth 2 -type d -exec basename {} \; >> all.runs.txt.tmp
+	find -L ${RUN_PATH}/$i -mindepth 2 -maxdepth 2 -type d -exec basename {} \; >> $OUTPUT_PATH/all.runs.txt.tmp
 done
 
-diff -Bw <(sort done/done.txt) <(sort all.runs.txt.tmp) |\
+diff -Bw <(sort $OUTPUT_PATH/done/done.txt) <(sort $OUTPUT_PATH/all.runs.txt.tmp) |\
     grep "^>" |\
-    sed s:"> ":: > new.runs.tmp
+    sed s:"> ":: > $OUTPUT_PATH/new.runs.tmp
 
-if [ $(cat new.runs.tmp | wc -l) -gt 0 ]
+if [ $(cat "$OUTPUT_PATH/new.runs.tmp" | wc -l) -gt 0 ]
 then
     echo "New runs detected:"
-    cat new.runs.tmp
+    cat $OUTPUT_PATH/new.runs.tmp
 else
     echo "No new runs detected."
-    rm new.runs.tmp
-    rm all.runs.txt.tmp
+    rm $OUTPUT_PATH/new.runs.tmp
+    rm $OUTPUT_PATH/all.runs.txt.tmp
     exit
 fi
 
-rm all.runs.txt.tmp
+rm $OUTPUT_PATH/all.runs.txt.tmp
 
 
 while read NEW_RUN
 do  
    copy_ncm_files
 
-done < new.runs.tmp
+done < $OUTPUT_PATH/new.runs.tmp
 
 
 ###################################
 ## for each project with new samples, run R
 
-PROJECT_LIST=$(cat *Samples.csv | cut -f2 -d,| grep -vf $OUTPUT_PATH/project_blacklist.txt | sort -u)
+PROJECT_LIST=$(cat $OUTPUT_PATH/*Samples.csv | cut -f2 -d,| grep -vf $OUTPUT_PATH/project_blacklist.txt | sort -u)
 
 for project in $PROJECT_LIST
 do
      send_email=""
    
    cd $ANALYSIS_PATH/Project_${project}
-   project_name=$(cut -f3 -d, New_Samples.csv | sort -u) 	
+   project_name=$(cut -f3 -d, $ANALYSIS_PATH/Project_${project}/New_Samples.csv | sort -u) 	
   
-    if [ ! -f "Config.yaml" ]
+    if [ ! -f "$ANALYSIS_PATH/Project_${project}/Config.yaml" ]
     then
-cat << EOF > Config.yaml
+cat << EOF > $ANALYSIS_PATH/Project_${project}/Config.yaml
 outpath: $ANALYSIS_PATH/Project_${project}
 cor_thres: 0.5
 project_name: $project_name
 EOF
    fi
     
-    if [  -f "Processed_Samples.csv" ]   
+    if [  -f "$ANALYSIS_PATH/Project_${project}/Processed_Samples.csv" ]   
     then
     COMM=$(cat << EOF
 module purge && module load mugqic/R_Bioconductor/4.2.2_3.16 mugqic/pandoc && 	
@@ -177,7 +186,7 @@ EOF
 )
 fi
      
-   if [ -f regexes.csv ]
+   if [ -f $ANALYSIS_PATH/Project_${project}/regexes.csv ]
    then 
        send_email="${send_email}${project} "
 
@@ -188,7 +197,7 @@ rm $ANALYSIS_PATH/Project_${project}/New_Samples.csv
 EOF
 )
    fi	
-jobid=$(echo "$COMM" | qsub -j oe -o $OUTPUT_PATH/logs/Project_${project}_${TIMESTAMP}_checkmate.out -N Project_${project}_ngs_checkmate -d $ANALYSIS_PATH/Project_${project} -l walltime=2:0:0 -l nodes=1:ppn=1 | cut -f1 -d.) 	   
+jobid=$(echo "$COMM" | qsub -j oe -o $OUTPUT_PATH/logs/Project_${project}_${TIMESTAMP}_checkmate.out -N Project_${project}_ngs_checkmate -d $ANALYSIS_PATH/Project_${project} -l walltime=6:0:0 -l nodes=1:ppn=1 | cut -f1 -d.) 	   
 ALLPIDS="$ALLPIDS $jobid"
  echo "Project_${project}" > $ANALYSIS_PATH/Project_${project}/job.log
  echo "$COMM" >> $ANALYSIS_PATH/Project_${project}/job.log
@@ -202,7 +211,7 @@ then
 	echo "no jobs"
 else
 	ALLPIDS=$(echo "$ALLPIDS" | tr ' ' '\n' | sort)
-	#echo -n "ALLPIDS:"; echo "$ALLPIDS" | tr '\n' ' ';
+	echo -n "ALLPIDS:"; echo "$ALLPIDS" | tr '\n' ' ';
 	sleep 15
 	while(true); do
                while(true); do
@@ -238,15 +247,15 @@ do
 This is an automated message sent from the NGSCheckmate event monitor.<br>
 NGSCheckmate report for Project $i is updated <br>
 <br>
-Results are stored here:<br>
+Updated NGS Checkmate Report is stored here:<br>
 $ANALYSIS_PATH/Project_${i}<br>
 <br>
 If you encounter any issues with this automated system please contact danielle.perley@mcgill.ca.<br>
 <br>
 EOF
 )                       
-            #EMAILLIST=$(grep $i $OUTPUT_PATH/email_config.txt | cut -f2)  
-			EMAILLIST="danielle.perley@mcgill.ca"
+                        EMAILLIST=$(grep $i $OUTPUT_PATH/email_config.txt | awk '{print $2}')  
+			#EMAILLIST="danielle.perley@mcgill.ca"
                         (
                         echo "To: $(echo "$EMAILLIST")"
                         echo "MIME-Version: 1.0"
