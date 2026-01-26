@@ -197,7 +197,7 @@ rm $ANALYSIS_PATH/Project_${project}/New_Samples.csv
 EOF
 )
    fi	
-jobid=$(echo "$COMM" | qsub -j oe -o $OUTPUT_PATH/logs/Project_${project}_${TIMESTAMP}_checkmate.out -N Project_${project}_ngs_checkmate -d $ANALYSIS_PATH/Project_${project} -l walltime=6:0:0 -l nodes=1:ppn=1 | cut -f1 -d.) 	   
+jobid=$(echo "$COMM" | qsub -j oe -o $OUTPUT_PATH/logs/Project_${project}_${TIMESTAMP}_checkmate.out -N Project_${project}_ngs_checkmate -d $ANALYSIS_PATH/Project_${project} -l walltime=48:0:0 -l nodes=1:ppn=1 | cut -f1 -d.) 	   
 ALLPIDS="$ALLPIDS $jobid"
  echo "Project_${project}" > $ANALYSIS_PATH/Project_${project}/job.log
  echo "$COMM" >> $ANALYSIS_PATH/Project_${project}/job.log

@@ -89,10 +89,13 @@ if(nrow(duplicates)>0) {
 setDT(data)
 
 
-#
+tart.time <- Sys.time()
 data[, `:=`(Sample1 = str_remove(Readset1, "_*L00[1-8]_*"),
             Sample2 = str_remove(Readset2, "_*L00[1-8]_*"))]
-
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print("Time for adding Sample: ")
+print (time.taken)
 data <- data[Sample1!=Sample2]           
 start.time <- Sys.time()
 data[,`:=`(Run1 = sapply(Readset1, function(x) dirs[dirs$Readset == x, "Run"][1]),
@@ -101,11 +104,16 @@ end.time <- Sys.time()
 time.taken <- end.time - start.time
 print("Time for adding Run: ")
 print (time.taken)
+
+start.time <- Sys.time()
 data2 <- data[, .(Correlation = min(Correlation),
                   Run1 = unique(Run1),
                   Run2 = unique(Run2)),
               by = .(Sample1, Sample2)]
-
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print("Time for selecting min correlation: ")
+print (time.taken)
 start.time <- Sys.time()
 saveRDS(data2,file = opt$out) 
 end.time <- Sys.time()
