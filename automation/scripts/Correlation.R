@@ -97,18 +97,9 @@ time.taken <- end.time - start.time
 print("Time for adding Sample: ")
 print (time.taken)
 data <- data[Sample1!=Sample2]           
-start.time <- Sys.time()
-data[,`:=`(Run1 = sapply(Readset1, function(x) dirs[dirs$Readset == x, "Run"][1]),
-           Run2 = sapply(Readset2, function(x) dirs[dirs$Readset == x, "Run"][1]))]
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-print("Time for adding Run: ")
-print (time.taken)
 
 start.time <- Sys.time()
-data2 <- data[, .(Correlation = min(Correlation),
-                  Run1 = unique(Run1),
-                  Run2 = unique(Run2)),
+data2 <- data[, .(Correlation = min(Correlation)),
               by = .(Sample1, Sample2)]
 end.time <- Sys.time()
 time.taken <- end.time - start.time
